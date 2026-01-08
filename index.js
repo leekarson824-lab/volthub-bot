@@ -3,11 +3,16 @@ const express = require("express");
 const fs = require("fs");
 
 // ===== CONFIG =====
-const TOKEN = process.env.TOKEN; // Discord bot token (Railway variable)
+const TOKEN = process.env.TOKEN;
 const PORT = process.env.PORT || 3000;
 const PREFIX = "!";
+const REQUIRED_ROLE = "Key Admin"; // change if needed
 
-// ===== EXPRESS (API FOR ROBLOX) =====
+// ===== DEBUG (VERY IMPORTANT) =====
+console.log("DEBUG TOKEN TYPE:", typeof TOKEN);
+console.log("DEBUG TOKEN LENGTH:", TOKEN ? TOKEN.length : "undefined");
+
+// ===== EXPRESS API =====
 const app = express();
 app.use(express.json());
 
@@ -16,14 +21,20 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ]
 });
 
-// ===== LOAD / SAVE KEYS =====
+// ===== LOAD KEYS =====
 let keys = {};
 if (fs.existsSync("keys.json")) {
-  keys = JSON.parse(fs.readFileSync("keys.json"));
+  try {
+    keys = JSON.parse(fs.readFileSync("keys.json", "utf8"));
+  } catch (e) {
+    console.error("❌ keys.json is invalid JSON");
+    process.exit(1);
+  }
 }
 
 function saveKeys() {
@@ -44,12 +55,15 @@ function generateKey() {
 client.on("messageCreate", (msg) => {
   if (!msg.content.startsWith(PREFIX) || msg.author.bot) return;
 
-  const args = msg.content.slice(1).split(" ");
+  const args = msg.content.slice(PREFIX.length).trim().split(/\s+/);
   const command = args.shift().toLowerCase();
 
-  // !genkey [days]
   if (command === "genkey") {
-    const days = parseInt(args[0]) || 30; // default 30 days
+    if (!msg.member.roles.cache.some(r => r.name === REQUIRED_ROLE)) {
+      return msg.reply("❌ You do not have permission to generate keys.");
+    }
+
+    const days = parseInt(args[0]) || 30;
     const key = generateKey();
 
     keys[key] = {
@@ -57,6 +71,7 @@ client.on("messageCreate", (msg) => {
     };
 
     saveKeys();
+
     msg.reply(
       `⚡ **VoltHub Premium Key**\n\`${key}\`\n⏳ Expires in **${days} days**`
     );
@@ -82,7 +97,13 @@ app.get("/check", (req, res) => {
 
 // ===== START SERVER =====
 app.listen(PORT, () => {
-  console.log("🌐 API running on port " + PORT);
+  console.log("🌐 API running on port", PORT);
 });
+
+// ===== LOGIN =====
+if (!TOKEN) {
+  console.error("❌ TOKEN ENV VARIABLE IS MISSING");
+  process.exit(1);
+}
 
 client.login(TOKEN);
