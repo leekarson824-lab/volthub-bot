@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 const PREFIX = "!";
 const REQUIRED_ROLE = "Key Admin"; // change if needed
 
-// ===== DEBUG (VERY IMPORTANT) =====
+// ===== DEBUG =====
 console.log("DEBUG TOKEN TYPE:", typeof TOKEN);
 console.log("DEBUG TOKEN LENGTH:", TOKEN ? TOKEN.length : "undefined");
 
@@ -16,13 +16,12 @@ console.log("DEBUG TOKEN LENGTH:", TOKEN ? TOKEN.length : "undefined");
 const app = express();
 app.use(express.json());
 
-// ===== DISCORD CLIENT =====
+// ===== DISCORD CLIENT (NO PRIVILEGED INTENTS) =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.MessageContent
   ]
 });
 
@@ -31,7 +30,7 @@ let keys = {};
 if (fs.existsSync("keys.json")) {
   try {
     keys = JSON.parse(fs.readFileSync("keys.json", "utf8"));
-  } catch (e) {
+  } catch (err) {
     console.error("❌ keys.json is invalid JSON");
     process.exit(1);
   }
@@ -52,11 +51,12 @@ function generateKey() {
 }
 
 // ===== DISCORD COMMANDS =====
-client.on("messageCreate", (msg) => {
-  if (!msg.content.startsWith(PREFIX) || msg.author.bot) return;
+client.on("messageCreate", async (msg) => {
+  if (!msg.guild || msg.author.bot) return;
+  if (!msg.content.startsWith(PREFIX)) return;
 
   const args = msg.content.slice(PREFIX.length).trim().split(/\s+/);
-  const command = args.shift().toLowerCase();
+  const command = args.shift()?.toLowerCase();
 
   if (command === "genkey") {
     if (!msg.member.roles.cache.some(r => r.name === REQUIRED_ROLE)) {
