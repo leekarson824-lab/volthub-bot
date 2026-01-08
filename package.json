@@ -1,12 +1,12 @@
 {
   "name": "volthub-backend",
   "version": "1.0.0",
+  "description": "VoltHub premium key system",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.1",
-    "express": "^4.18.2"
+    "discord.js": "^14.15.3"
   }
 }
