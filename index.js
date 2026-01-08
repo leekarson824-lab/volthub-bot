@@ -1,18 +1,26 @@
 import express from "express";
-import fs from "fs-extra";
+import fs from "fs";
 import { Client, GatewayIntentBits } from "discord.js";
 
 // ================= CONFIG =================
 const PORT = process.env.PORT || 8080;
-const TOKEN = process.env.TOKEN; // Railway env var
+const TOKEN = process.env.TOKEN;
 const KEYS_FILE = "./keys.json";
 
 // ================= FILE SETUP =================
 if (!fs.existsSync(KEYS_FILE)) {
-  fs.writeJsonSync(KEYS_FILE, {});
+  fs.writeFileSync(KEYS_FILE, JSON.stringify({}, null, 2));
 }
 
 // ================= HELPERS =================
+function readKeys() {
+  return JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
+}
+
+function saveKeys(data) {
+  fs.writeFileSync(KEYS_FILE, JSON.stringify(data, null, 2));
+}
+
 function generateScriptKey() {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   let key = "SCRIPT-";
@@ -30,52 +38,36 @@ app.get("/", (_, res) => {
   res.send("VoltHub API running");
 });
 
-// ================= VALIDATE ENDPOINT =================
+// ================= VALIDATE =================
 app.post("/validate", (req, res) => {
   const { key, robloxId, hwid } = req.body;
+  if (!key || !robloxId || !hwid)
+    return res.json({ valid: false });
 
-  if (!key || !robloxId || !hwid) {
-    return res.json({ valid: false, message: "Invalid request." });
-  }
-
-  const keys = fs.readJsonSync(KEYS_FILE);
+  const keys = readKeys();
   const data = keys[key];
 
-  if (!data) {
-    return res.json({ valid: false, message: "Invalid key." });
-  }
+  if (!data || data.blacklisted)
+    return res.json({ valid: false });
 
-  if (data.blacklisted) {
-    return res.json({
-      valid: false,
-      message:
-        "❌ This key has been blacklisted.\nPlease open a support ticket."
-    });
-  }
-
-  // First-time bind
   if (!data.robloxId && !data.hwid) {
     data.robloxId = robloxId;
     data.hwid = hwid;
-    keys[key] = data;
-    fs.writeJsonSync(KEYS_FILE, keys);
+    saveKeys(keys);
     return res.json({ valid: true });
   }
 
-  // Mismatch = blacklist
   if (data.robloxId !== robloxId || data.hwid !== hwid) {
     data.blacklisted = true;
-    keys[key] = data;
-    fs.writeJsonSync(KEYS_FILE, keys);
-
+    saveKeys(keys);
     return res.json({
       valid: false,
       message:
-        "⚠ KEY VIOLATION DETECTED ⚠\n\nThis key is locked to another account.\nOpen a support ticket with a screenshot."
+        "Key locked to another account. Open a support ticket."
     });
   }
 
-  return res.json({ valid: true });
+  res.json({ valid: true });
 });
 
 // ================= START API =================
@@ -92,15 +84,13 @@ client.once("ready", () => {
   console.log(`🤖 Logged in as ${client.user.tag}`);
 });
 
-// ================= SLASH COMMAND =================
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "getscript") {
+    const keys = readKeys();
     const userId = interaction.user.id;
-    const keys = fs.readJsonSync(KEYS_FILE);
 
-    // Check existing key
     for (const k in keys) {
       if (keys[k].discordId === userId && !keys[k].blacklisted) {
         return interaction.reply({
@@ -110,7 +100,6 @@ client.on("interactionCreate", async interaction => {
       }
     }
 
-    // Generate new key
     const newKey = generateScriptKey();
     keys[newKey] = {
       discordId: userId,
@@ -120,10 +109,10 @@ client.on("interactionCreate", async interaction => {
       createdAt: Date.now()
     };
 
-    fs.writeJsonSync(KEYS_FILE, keys);
+    saveKeys(keys);
 
     interaction.reply({
-      content: `✅ **Script Key Generated:**\n\`\`\`${newKey}\`\`\``,
+      content: `✅ **New Script Key:**\n\`\`\`${newKey}\`\`\``,
       ephemeral: true
     });
   }
