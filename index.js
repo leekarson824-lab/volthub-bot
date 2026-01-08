@@ -1,22 +1,15 @@
-const { Client, GatewayIntentBits } = require("discord.js");
-const express = require("express");
-const fs = require("fs");
+const {
+  Client,
+  GatewayIntentBits,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
+} = require("discord.js");
 
-// ===== CONFIG =====
-const TOKEN = process.env.TOKEN;
-const PORT = process.env.PORT || 3000;
-const PREFIX = "!";
-const REQUIRED_ROLE = "Key Admin"; // change if needed
-
-// ===== DEBUG =====
-console.log("DEBUG TOKEN TYPE:", typeof TOKEN);
-console.log("DEBUG TOKEN LENGTH:", TOKEN ? TOKEN.length : "undefined");
-
-// ===== EXPRESS API =====
-const app = express();
-app.use(express.json());
-
-// ===== DISCORD CLIENT (NO PRIVILEGED INTENTS) =====
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -25,85 +18,114 @@ const client = new Client({
   ]
 });
 
-// ===== LOAD KEYS =====
-let keys = {};
-if (fs.existsSync("keys.json")) {
-  try {
-    keys = JSON.parse(fs.readFileSync("keys.json", "utf8"));
-  } catch (err) {
-    console.error("❌ keys.json is invalid JSON");
-    process.exit(1);
-  }
-}
+const TOKEN = process.env.TOKEN;
 
-function saveKeys() {
-  fs.writeFileSync("keys.json", JSON.stringify(keys, null, 2));
-}
+// ===== READY =====
+client.once("ready", () => {
+  console.log(`🤖 Logged in as ${client.user.tag}`);
+  console.log("🌐 API running on port 8080");
+});
 
-// ===== KEY GENERATOR =====
-function generateKey() {
-  return (
-    "VH-" +
-    Math.random().toString(36).substring(2, 6).toUpperCase() +
-    "-" +
-    Math.random().toString(36).substring(2, 6).toUpperCase()
-  );
-}
-
-// ===== DISCORD COMMANDS =====
+// ===== PANEL COMMAND =====
 client.on("messageCreate", async (msg) => {
-  if (!msg.guild || msg.author.bot) return;
-  if (!msg.content.startsWith(PREFIX)) return;
+  if (msg.author.bot) return;
+  if (msg.content !== "!panel") return;
 
-  const args = msg.content.slice(PREFIX.length).trim().split(/\s+/);
-  const command = args.shift()?.toLowerCase();
+  const embed = new EmbedBuilder()
+    .setTitle("⚡ VoltHub Premium Control Panel")
+    .setDescription(
+      "Use the buttons below to redeem your key, get the script, or manage your access."
+    )
+    .setColor(0x000000);
 
-  if (command === "genkey") {
-    if (!msg.member.roles.cache.some(r => r.name === REQUIRED_ROLE)) {
-      return msg.reply("❌ You do not have permission to generate keys.");
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("redeem_key")
+      .setLabel("Redeem Key")
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("get_script")
+      .setLabel("Get Script")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("get_role")
+      .setLabel("Get Role")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("reset_hwid")
+      .setLabel("Reset HWID")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await msg.channel.send({ embeds: [embed], components: [row] });
+});
+
+// ===== INTERACTIONS =====
+client.on("interactionCreate", async (interaction) => {
+
+  // ---- BUTTONS ----
+  if (interaction.isButton()) {
+
+    if (interaction.customId === "redeem_key") {
+      const modal = new ModalBuilder()
+        .setCustomId("redeem_modal")
+        .setTitle("Redeem a key");
+
+      const keyInput = new TextInputBuilder()
+        .setCustomId("script_key")
+        .setLabel("Enter script key below:")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(keyInput)
+      );
+
+      return interaction.showModal(modal);
     }
 
-    const days = parseInt(args[0]) || 30;
-    const key = generateKey();
+    if (interaction.customId === "get_script") {
+      return interaction.reply({
+        content:
+          "📜 **Your Script:**\n```lua\nloadstring(game:HttpGet('https://your-api-url/script'))()\n```",
+        ephemeral: true
+      });
+    }
 
-    keys[key] = {
-      expires: Date.now() + days * 24 * 60 * 60 * 1000
-    };
+    if (interaction.customId === "get_role") {
+      return interaction.reply({
+        content: "👤 Role assignment coming soon.",
+        ephemeral: true
+      });
+    }
 
-    saveKeys();
-
-    msg.reply(
-      `⚡ **VoltHub Premium Key**\n\`${key}\`\n⏳ Expires in **${days} days**`
-    );
-  }
-});
-
-// ===== API ENDPOINT =====
-app.get("/check", (req, res) => {
-  const key = req.query.key;
-
-  if (!key || !keys[key]) {
-    return res.json({ valid: false });
-  }
-
-  if (Date.now() > keys[key].expires) {
-    delete keys[key];
-    saveKeys();
-    return res.json({ valid: false });
+    if (interaction.customId === "reset_hwid") {
+      return interaction.reply({
+        content: "♻️ HWID reset request received.",
+        ephemeral: true
+      });
+    }
   }
 
-  return res.json({ valid: true });
-});
+  // ---- MODAL SUBMIT ----
+  if (interaction.isModalSubmit()) {
+    if (interaction.customId === "redeem_modal") {
+      const key = interaction.fields.getTextInputValue("script_key");
 
-// ===== START SERVER =====
-app.listen(PORT, () => {
-  console.log("🌐 API running on port", PORT);
-});
+      console.log("🔑 KEY SUBMITTED:", key);
+      console.log("👤 USER:", interaction.user.tag);
 
-// ===== LOGIN =====
-if (!TOKEN) {
-  console.error("❌ TOKEN ENV VARIABLE IS MISSING");
-  process.exit(1);
-}
+      // TODO: validate key with your backend / database
+
+      return interaction.reply({
+        content: "✅ Key received. Validating...",
+        ephemeral: true
+      });
+    }
+  }
+});
 
 client.login(TOKEN);
