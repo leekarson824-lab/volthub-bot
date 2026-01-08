@@ -1,0 +1,45 @@
+-- VoltHub Loader
+
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local Analytics = game:GetService("RbxAnalyticsService")
+
+local player = Players.LocalPlayer
+
+-- CONFIG
+local API_URL = "https://YOUR-RAILWAY-APP.up.railway.app/validate"
+
+-- Ask for key (simple)
+local KEY = getgenv().VOLTHUB_KEY
+if not KEY then
+    player:Kick("❌ No key provided.\n\nPlease redeem a key in Discord.")
+    return
+end
+
+-- Build payload
+local payload = {
+    key = KEY,
+    robloxId = player.UserId,
+    hwid = Analytics:GetClientId()
+}
+
+-- Send request
+local res = request({
+    Url = API_URL,
+    Method = "POST",
+    Headers = {
+        ["Content-Type"] = "application/json"
+    },
+    Body = HttpService:JSONEncode(payload)
+})
+
+local data = HttpService:JSONDecode(res.Body)
+
+-- Validate
+if not data.valid then
+    player:Kick(data.message or "❌ Key validation failed.")
+    return
+end
+
+-- ✅ LOAD MAIN SCRIPT
+loadstring(game:HttpGet("https://raw.githubusercontent.com/leekarson824-lab/volthub/main/main.lua"))()
