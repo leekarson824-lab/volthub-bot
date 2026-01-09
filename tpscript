@@ -1,4 +1,46 @@
---==================================================
+--================= VOLT HUB KEY SYSTEM =================
+
+local EXPECTED_KEY_LENGTH = 30
+
+-- TEMP STATIC KEYS (backend will replace this later)
+local VALID_KEYS = {
+    ["ABCDEF1234567890ABCDEF123456"] = true,
+    -- add more keys here if needed
+}
+
+-- Read key
+local providedKey = _G.VOLT_KEY
+
+-- No key provided
+if not providedKey then
+    game:GetService("Players").LocalPlayer:Kick(
+        "VoltHub: No key provided.\n\nGet a key from the panel."
+    )
+    return
+end
+
+-- Wrong length
+if typeof(providedKey) ~= "string" or #providedKey ~= EXPECTED_KEY_LENGTH then
+    game:GetService("Players").LocalPlayer:Kick(
+        "VoltHub: Invalid key format."
+    )
+    return
+end
+
+-- Invalid key
+if not VALID_KEYS[providedKey] then
+    game:GetService("Players").LocalPlayer:Kick(
+        "VoltHub: Invalid or expired key.\n\nOpen a support ticket."
+    )
+    return
+end
+
+-- Burn key from global env (anti-leak)
+_G.VOLT_KEY = nil
+
+warn("⚡ VoltHub key accepted!")
+--======================================================
+-==================================================
 -- VOLT HUB ⚡ + INSTANT BLOCK SYSTEM
 --==================================================
 
@@ -188,7 +230,7 @@ Create("TextLabel", {
     Size = UDim2.new(1, -40, 1, 0),
     Position = UDim2.new(0, 10, 0, 0),
     BackgroundTransparency = 1,
-    Text = "VOLT HUB ⚡ ULTRA",
+    Text = "VOLT HUB ⚡",
     Font = Enum.Font.GothamBlack,
     TextSize = 16,
     TextColor3 = Colors.TextDark,
